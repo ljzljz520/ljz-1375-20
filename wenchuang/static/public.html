@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文创来源索引 · 公开页</title>
+<style>
+body{font-family:"Noto Serif SC",system-ui,sans-serif;margin:0;background:#faf6ee;color:#2b1b0f}
+header{background:#7a1f1f;color:#f4d58d;padding:12px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+a{color:#f4d58d}
+.bar{background:#fff;border-bottom:1px solid #e3d6bd;padding:10px 20px;display:flex;gap:8px;flex-wrap:wrap}
+input,select,button{font-size:14px;padding:6px}
+.grid{display:grid;grid-template-columns:1.2fr 2fr;gap:16px;padding:16px}
+.panel{background:#fff;border:1px solid #e3d6bd;border-radius:8px;padding:12px}
+#map{height:360px;border-radius:8px;position:relative;overflow:hidden;
+ background:linear-gradient(135deg,#efe6d2,#e2d3b3);border:1px solid #cbb98f}
+.pin{position:absolute;transform:translate(-50%,-100%);cursor:pointer;font-size:11px;
+ text-align:center;line-height:1.1;filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+.pin .dot{width:12px;height:12px;border-radius:50%;border:2px solid #fff;display:inline-block}
+.legend{font-size:12px;margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 4px 0 10px}
+.card{border:1px solid #e3d6bd;border-radius:8px;padding:12px;margin-bottom:12px;background:#fff}
+.batch{border-left:3px solid #2f6b4f;padding:6px 10px;margin:6px 0;background:#f7fbf8;font-size:13px}
+.story{color:#7a6a50;font-size:12px;font-style:italic}
+.fields{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;font-size:12px;margin-top:4px}
+.fields b{color:#7a1f1f}
+.price{font-weight:bold;color:#7a1f1f}
+.noprice{color:#9a8a72;font-style:normal}
+.ad{border:2px dashed #c9a227;background:#fffaeb;padding:8px 12px;border-radius:8px;font-size:12px;margin:8px 0}
+.ad::before{content:"广告 AD";display:inline-block;background:#c9a227;color:#fff;
+ font-size:10px;padding:1px 6px;border-radius:8px;margin-right:6px}
+.material::before{content:"资料 MATERIAL";display:inline-block;background:#2f6b4f;color:#fff;
+ font-size:10px;padding:1px 6px;border-radius:8px;margin-right:6px}
+.removed{background:#f3f0e9;color:#8a8172;text-decoration:line-through;padding:4px 8px;border-radius:4px;font-size:12px}
+.invalid{background:#fbeaea;border-left:4px solid #a01818;padding:6px 10px;font-size:12px;border-radius:4px;margin:6px 0}
+.tag{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;margin-right:4px}
+.support{background:#e3f2e3;color:#1b6b1b}.dispute{background:#fbe3e3;color:#a01818}
+.off{color:#a01818}.muted{color:#9a8a72;font-size:12px}
+table{border-collapse:collapse;width:100%;font-size:12px}td,th{border:1px solid #e3d6bd;padding:4px}
+</style></head><body>
+<header>
+  <b>文创来源索引 · 公开页</b>
+  用户 <input id="user" value="u1" size="6">
+  <a href="/admin.html">→ 管理台</a>
+  <span class="muted" style="color:#e8c879">本站仅展示来源信息，不提供下单与支付结算</span>
+</header>
+<div class="bar">
+  文化出处<input id="fCulture" placeholder="如 簪花仕女图">
+  制造地<input id="fMake" placeholder="如 德化县">
+  设计地<input id="fDesign" placeholder="如 西安">
+  销售地<input id="fSale" placeholder="如 杭州">
+  币种<select id="fCur"><option value="">全部</option><option>CNY</option><option>USD</option></select>
+  <button onclick="loadList()">筛选</button>
+  <input id="kw" placeholder="搜索(索引晚到时可能暂时搜不到)">
+  <button onclick="doSearch()">搜索</button>
+  <button onclick="showFavs()">我的收藏</button>
+  <button onclick="showCompare()">比较已选(<span id="cmpN">0</span>)</button>
+</div>
+<div class="grid">
+  <div class="panel">
+    <div id="map"></div>
+    <div class="legend">
+      <i style="background:#7a1f1f"></i>制造地
+      <i style="background:#2f5f9e"></i>设计地
+      <i style="background:#c9a227"></i>销售地
+    </div>
+    <p class="muted">三类地点分图层呈现；同名商品不同批次可能落在不同制造地。</p>
+    <div id="mapInfo" class="muted">点击图钉查看该地点涉及的批次。</div>
+  </div>
+  <div>
+    <div class="ad">本区域为<b>广告位</b>，与下方来源资料明确分区；广告不构成来源或产地证明。</div>
+    <div id="list"></div>
+    <div id="favs"></div>
+    <div id="compare"></div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let ALL=[], CMP=new Set();
+function fmtPrice(p){
+  if(!p) return '<span class="noprice">暂无报价</span>'; // 缺价不显示免费/0
+  const y=v=>(v/100).toFixed(v%100?2:0);
+  const range = p.max && p.max!==p.min ? `¥${y(p.min)} – ¥${y(p.max)}` : `¥${y(p.min)}`;
+  return `<span class="price">${p.currency==='CNY'?'¥':p.currency+' '}${range}</span>
+          <span class="muted">生效自 ${new Date(p.effective_from*1000).toLocaleDateString()}</span>`;
+}
+function batchHTML(b){
+  return `<div class="batch">批次 ${b.batch_no} <span class="muted">(版本 v${b.version})</span>
+    <div class="fields">
+      <span><b>设计地</b><br>${b.design_location||'—'}</span>
+      <span><b>制造地</b><br>${b.manufacture_location||'—'}</span>
+      <span><b>文化出处</b><br>${b.culture_source||'—'}</span>
+      <span><b>销售地</b><br>${b.sale_location||'—'}</span>
+    </div>
+    <div>${fmtPrice(b.price)}</div>
+  </div>`;
+}
+function cardHTML(it){
+  return `<div class="card">
+    <label><input type="checkbox" ${CMP.has(it.product_id)?'checked':''}
+      onchange="toggleCmp(${it.product_id})"> 加入比较</label>
+    <b style="font-size:16px;color:#7a1f1f">#${it.product_id} ${it.name}</b>
+    <button onclick="fav(${it.product_id})">☆ 收藏</button>
+    <button onclick="versions(${it.product_id})">版本</button>
+    <button onclick="evidence(${it.product_id})">证据</button>
+    <div class="story">品牌故事(仅叙事，不覆盖实际制作信息)：${it.brand_story||'—'}</div>
+    ${it.batches.map(batchHTML).join('')}
+    <div class="material" style="margin-top:6px"></div><div id="media_${it.product_id}" class="muted">加载中…</div>
+    <div id="extra_${it.product_id}"></div>
+  </div>`;
+}
+async function loadList(){
+  const q=new URLSearchParams();
+  for(const [k,v] of [["culture_source",$("fCulture").value],["manufacture_location",$("fMake").value],
+    ["design_location",$("fDesign").value],["sale_location",$("fSale").value],["currency",$("fCur").value]])
+    if(v) q.set(k,v);
+  const j=await fetch("/api/products?"+q).then(r=>r.json());
+  ALL=j.items; render();
+}
+async function doSearch(){
+  const j=await fetch("/api/search?q="+encodeURIComponent($("kw").value)).then(r=>r.json());
+  ALL=j.items; render(true);
+}
+function render(searched){
+  $("list").innerHTML = ALL.length? ALL.map(cardHTML).join('')
+    : `<p class="muted">${searched?'没有已入索引的匹配结果（索引可能晚到，商品仍可经筛选/链接访问）':'暂无公开商品'}</p>`;
+  ALL.forEach(it=>loadMedia(it.product_id));
+  drawMap(); $("cmpN").textContent=CMP.size;
+}
+async function loadMedia(pid){
+  const j=await fetch(`/api/products/${pid}`).then(r=>r.json());
+  const el=$(`media_${pid}`); if(!el) return;
+  const mats=(j._detail.media||[]).filter(m=>m.section==="material");
+  const ads=(j._detail.media||[]).filter(m=>m.section==="ad");
+  el.innerHTML = mats.map(m=>`资料引用: ${m.ref}`).join("<br>") || "—";
+  if(ads.length){ const box=document.createElement("div"); box.className="ad";
+    box.innerHTML="广告素材引用: "+ads.map(a=>a.ref).join(", ")+"（广告内容与来源资料无关）";
+    el.after(box); }
+}
+function drawMap(){
+  const places={manufacture:{},design:{},sale:{}};
+  ALL.forEach(it=>it.batches.forEach(b=>{
+    [["manufacture_location","manufacture","#7a1f1f"],["design_location","design","#2f5f9e"],
+     ["sale_location","sale","#c9a227"]].forEach(([f,layer])=>{
+      if(b[f]){(places[layer][b[f]]??=[]).push(`${it.name}/${b.batch_no}`);}
+    });
+  }));
+  const layers=[{"k":"manufacture",c:"#7a1f1f"},{"k":"design",c:"#2f5f9e"},{"k":"sale",c:"#c9a227"}];
+  let html="",n=0;
+  layers.forEach((L,li)=>Object.keys(places[L.k]).forEach((name,i)=>{
+    const cols=Object.keys(places[L.k]).length;
+    const left=12+(li*30)+(i%3)*18, top=18+Math.floor(n/1)*0+ (20+((i*37+li*53)%260));
+    n++;
+    html+=`<div class="pin" style="left:${15+((i*41+li*67)%280)}px;top:${30+((i*53+li*71)%290)}px"
+      onclick='mapInfo(${JSON.stringify(name)},${JSON.stringify(places[L.k][name])},${JSON.stringify(L.k)})'>
+      <span class="dot" style="background:${L.c}"></span><br>${name}</div>`;
+  }));
+  $("map").innerHTML=html;
+  window._places=places;
+}
+function mapInfo(name,batchList,layer){
+  const label={manufacture:"制造地",design:"设计地",sale:"销售地"}[layer];
+  $("mapInfo").innerHTML=`<b>${label}：${name}</b><br>涉及批次：${batchList.join("、")}
+    <br><span class="muted">（地点信息仅表示被标注的关系，链接探测不证明产地真实）</span>`;
+}
+function toggleCmp(id){CMP.has(id)?CMP.delete(id):CMP.add(id);$("cmpN").textContent=CMP.size;}
+async function fav(pid){
+  const r=await fetch(`/api/products/${pid}/favorites`,{method:"POST",
+    headers:{"X-User":$("user").value}}); const j=await r.json();
+  alert(r.ok?`已收藏 #${j.favorite_id}（已定格当时公开信息快照）`:(j.message||"失败"));
+}
+async function versions(pid){
+  const bids=ALL.find(x=>x.product_id===pid)?.batches.map(b=>b.batch_id)||[];
+  let out="";
+  for(const bid of bids){
+    const j=await fetch(`/api/batches/${bid}/versions`).then(r=>r.json());
+    out+=`<b>批次 ${bid} 版本链</b>`+j.versions.map(v=>
+      `<div class="muted">v${v.version} ${new Date(v.changed_at*1000).toLocaleString()} 操作:${v.editor_role}
+      制造地:${v.manufacture_location||'—'} 出处:${v.culture_source||'—'} ${v.change_note||''}</div>`).join("");
+  }
+  $("extra_"+pid).innerHTML=out;
+}
+async function evidence(pid){
+  const j=await fetch(`/api/products/${pid}/evidence`).then(r=>r.json());
+  $("extra_"+pid).innerHTML=j.evidence.map(e=>
+    `<span class="tag ${e.stance}">${e.stance}</span>${e.claim_field}→${e.claim_value||''}
+     [${e.evidence_type}] ${e.ref}
+     ${e.status==='withdrawn'?'<span class="off">（已撤证：'+e.withdrawn_note+'）</span>':''}`).join("<br>")
+    ||'<span class="muted">暂无证据</span>';
+}
+async function showFavs(){
+  const j=await fetch("/api/favorites",{headers:{"X-User":$("user").value}}).then(r=>r.json());
+  $("favs").innerHTML="<h3>我的收藏（保留当时公开信息）</h3>"+j.items.map(f=>{
+    const inv=f.favorite.state!=="active";
+    return `<div class="card ${inv?'off':''}">
+      <b>#${f.product.id} ${f.product.name}</b>
+      <span class="muted">收藏于 ${new Date(f.favorite.taken_at*1000).toLocaleString()}</span>
+      ${inv?`<div class="invalid">该收藏已失效：${f.favorite.reason}（仍可查看冻结的历史信息，但不代表当前有效）</div>`
+           :'<span class="tag support">当前有效</span>'}
+      <div class="story">品牌故事：${f.product.brand_story||'—'}</div>
+      ${f.batches.map(b=>`<div class="batch">${b.batch.batch_no} v${b.batch.current_version}
+        <span class="muted">(冻结时的版本)</span><br>
+        制造地:${b.batch.manufacture_location||'—'} 出处:${b.batch.culture_source||'—'}</div>`).join("")}
+      <div>${f.media.map(m=>m.removed
+        ?`<div class="removed">素材 #${m.id} 已撤权 · 不再展示</div>`
+        :`<div class="muted">资料引用: ${m.ref}</div>`).join("")}</div>
+    </div>`;
+  }).join("")||'<p class="muted">暂无收藏</p>';
+}
+async function showCompare(){
+  if(!CMP.size) return;
+  const j=await fetch("/api/compare?ids="+[...CMP].join(",")).then(r=>r.json());
+  $("compare").innerHTML="<h3>商品比较（商品级快照 vs 批次级版本）</h3>"+
+   `<table><tr><th>商品</th><th>品牌故事(商品级,叙事)</th><th>批次版本</th>
+    <th>设计地</th><th>制造地</th><th>文化出处</th><th>销售地</th><th>当前价</th></tr>`+
+   j.items.flatMap(it=>it.batches.map((b,i)=>
+    `<tr><td ${i?'':'rowspan='+it.batches.length}>${it.name}</td>
+     <td ${i?'':'rowspan='+it.batches.length} class="story">${it.brand_story||'—'}</td>
+     <td>${b.batch_no} v${b.version}</td>
+     <td>${b.design_location||'—'}</td><td>${b.manufacture_location||'—'}</td>
+     <td>${b.culture_source||'—'}</td><td>${b.sale_location||'—'}</td>
+     <td>${fmtPrice(b.price)}</td></tr>`)).join("")+"</table>";
+}
+loadList();
+</script></body></html>

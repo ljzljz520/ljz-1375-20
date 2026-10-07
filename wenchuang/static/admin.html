@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文创来源索引 · 管理台</title>
+<style>
+body{font-family:"Noto Serif SC",system-ui,sans-serif;margin:0;background:#faf6ee;color:#2b1b0f}
+header{background:#7a1f1f;color:#f4d58d;padding:12px 20px;display:flex;gap:16px;align-items:center}
+select,input,button,textarea{font-size:14px;padding:6px;margin:2px}
+.wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px}
+.card{background:#fff;border:1px solid #e3d6bd;border-radius:8px;padding:14px;margin-bottom:14px}
+.card h3{margin:0 0 8px;color:#7a1f1f}
+label{display:block;font-size:12px;color:#6b5336;margin-top:6px}
+.warn{background:#fff4e5;border-left:4px solid #d98a00;padding:8px;font-size:12px;border-radius:4px}
+.locked{background:#f0ebe0;border:1px dashed #b09a76;padding:8px;border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+td,th{border:1px solid #e3d6bd;padding:4px 6px;text-align:left}
+.tag{display:inline-block;padding:1px 6px;border-radius:10px;font-size:11px;margin-right:4px}
+.support{background:#e3f2e3;color:#1b6b1b}.dispute{background:#fbe3e3;color:#a01818}
+.off{color:#a01818;font-weight:bold}.on{color:#1b6b1b}
+.ad-box{border:2px solid #c9a227;background:#fffaeb}
+.mat-box{border:2px solid #2f6b4f;background:#f2faf5}
+button{cursor:pointer;border-radius:4px;border:1px solid #7a1f1f;background:#7a1f1f;color:#fff}
+button.sec{background:#fff;color:#7a1f1f}
+pre{background:#f6f1e5;padding:8px;overflow:auto;font-size:11px;max-height:240px}
+</style></head><body>
+<header>
+  <b>文创来源索引 · 管理台</b>
+  角色:
+  <select id="role">
+    <option value="editor">资料编辑 editor</option>
+    <option value="marketing">营销编辑 marketing</option>
+    <option value="reviewer">复核员 reviewer</option>
+    <option value="admin">管理员 admin</option>
+  </select>
+  <input id="user" placeholder="用户ID" value="u1">
+  <a href="/public.html" style="color:#f4d58d">→ 公开页</a>
+  <span id="msg" style="margin-left:auto;font-size:12px"></span>
+</header>
+<div class="wrap">
+<div>
+  <div class="card">
+    <h3>① 新建商品（品牌故事与来源严格分列）</h3>
+    <input id="pname" placeholder="商品名称, 如: 唐仕女立牌">
+    <textarea id="pstory" placeholder="品牌故事/营销叙事 —— 不得作为制作地等事实依据" rows="2" style="width:95%"></textarea>
+    <button onclick="createProduct()">新建商品</button>
+  </div>
+
+  <div class="card">
+    <h3>② 批次与来源字段（设计地≠制造地≠销售地）</h3>
+    <div class="warn">同名商品的不同批次可能产地不同；产地等事实挂在<b>批次</b>上。
+      营销编辑修改以下字段会被服务器拒绝（403）。</div>
+    <input id="pid" placeholder="商品ID" size="6">
+    <input id="bno" placeholder="批次号 如 2026-A">
+    <label>设计地</label><input id="f_design" placeholder="如 西安">
+    <label>制造地（实际制作信息）</label><input id="f_make" placeholder="如 泉州 德化县">
+    <label>文化出处</label><input id="f_culture" placeholder="如 唐墓壁画/簪花仕女图">
+    <label>销售地</label><input id="f_sale" placeholder="如 杭州 西湖门店">
+    <button onclick="createBatch()">录入批次</button>
+  </div>
+
+  <div class="card">
+    <h3>③ 渠道 · 价格（币种/区间/生效时间；缺价≠免费）</h3>
+    <input id="cb_batch" placeholder="批次ID" size="6">
+    <input id="cb_name" placeholder="渠道, 如 西湖门店 / 天猫旗舰店">
+    <input id="cb_url" placeholder="链接(探测仅判断访问状态)" size="30">
+    <button onclick="addChannel()">添加渠道</button>
+    <hr>
+    <input id="pr_batch" placeholder="批次ID" size="6">
+    <select id="pr_cur"><option>CNY</option><option>USD</option></select>
+    <input id="pr_min" type="number" placeholder="下限(元,可空=缺价)" size="8">
+    <input id="pr_max" type="number" placeholder="上限" size="8">
+    <label>生效时间(unix秒, 留空=现在)</label><input id="pr_from" size="12">
+    <button onclick="addPrice()">写入价格</button>
+    <div class="warn">链接探测结论只代表“可访问/不可访问”，<b>不证明</b>店铺或产地真实。
+      没有价格记录或下限为空时，公开页显示“暂无报价”，绝不渲染为 0 元或免费。</div>
+  </div>
+
+  <div class="card">
+    <h3>④ 证据（支持/争议并列 → 复核 → 下架传播）</h3>
+    <input id="ev_batch" placeholder="批次ID" size="6">
+    <select id="ev_field">
+      <option value="design_location">design_location 设计地</option>
+      <option value="manufacture_location">manufacture_location 制造地</option>
+      <option value="culture_source">culture_source 文化出处</option>
+      <option value="sale_location">sale_location 销售地</option>
+    </select>
+    <input id="ev_val" placeholder="主张值">
+    <select id="ev_type"><option>doc</option><option>link</option><option>registry</option><option>image</option></select>
+    <input id="ev_ref" placeholder="证据引用(发布时校验)">
+    <select id="ev_stance"><option value="support">support 支持</option><option value="dispute">dispute 争议</option></select>
+    <button onclick="addEvidence()">提交证据</button>
+    <hr>
+    <input id="rev_ev" placeholder="证据ID" size="6">
+    <select id="rev_result"><option value="upheld">upheld 成立(批次下架)</option><option value="rejected">rejected 驳回</option></select>
+    <input id="rev_note" placeholder="复核说明">
+    <button class="sec" onclick="reviewEvidence()">提交复核</button>
+  </div>
+
+  <div class="card">
+    <h3>⑤ 媒体（资料区 / 广告区物理分隔；撤权）</h3>
+    <div class="mat-box">资料区 material（资料/管理员可传，发布时必须有可用素材）
+      <input id="m_pid" placeholder="商品ID" size="6"><input id="m_ref" placeholder="素材引用/路径">
+      <button onclick="addMedia('material')">上传资料素材</button>
+    </div>
+    <div class="ad-box" style="margin-top:6px">广告区 ad（营销/管理员可投放，与资料分区展示）
+      <button onclick="addMedia('ad')">投放广告素材</button>
+    </div>
+    <input id="w_media" placeholder="媒体ID" size="6">
+    <input id="w_note" placeholder="撤权原因">
+    <button class="sec" onclick="withdrawMedia()">撤权图片</button>
+  </div>
+</div>
+
+<div>
+  <div class="card">
+    <h3>⑥ 发布作业（同时校验引用来源与可用媒体；无交易结算）</h3>
+    <input id="pub_pid" placeholder="商品ID" size="6">
+    <button onclick="publishProduct()">校验并发布</button>
+    <div class="warn">发布阻断条件：批次来源字段缺失 / 主张无支持证据 / 存在未复核争议 /
+      无可用资料媒体 / 引用媒体已撤权或为空。</div>
+  </div>
+  <div class="card">
+    <h3>⑦ 合并 / 上下架 / 索引</h3>
+    合并 <input id="m_src" placeholder="源商品" size="5"> → <input id="m_dst" placeholder="目标" size="5">
+    <button class="sec" onclick="mergeP()">合并(仅admin)</button><br>
+    下架 <input id="off_pid" placeholder="商品ID" size="5"><input id="off_reason" placeholder="原因">
+    <button class="sec" onclick="setStatus('off')">下架传播</button>
+    <button class="sec" onclick="setStatus('on')">重新上架</button>
+    <button class="sec" onclick="reindex()">重建搜索索引(允许晚到)</button>
+  </div>
+  <div class="card">
+    <h3>服务器响应 / 审计</h3>
+    <pre id="log">（操作结果显示于此）</pre>
+    <button class="sec" onclick="loadProducts()">刷新公开商品</button>
+  </div>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path, method="GET", body){
+  const opt={method, headers:{"Content-Type":"application/json",
+    "X-Role":$("role").value, "X-User":$("user").value}};
+  if(body) opt.body=JSON.stringify(body);
+  const r=await fetch(path,opt), j=await r.json().catch(()=>({}));
+  $("msg").textContent = r.ok ? "OK "+r.status : "HTTP "+r.status;
+  $("log").textContent = JSON.stringify(j,null,2) + "\n\n" + $("log").textContent;
+  if(!r.ok) throw new Error(j.message||"err");
+  return j;
+}
+async function createProduct(){await api("/api/products","POST",
+  {name:$("pname").value,brand_story:$("pstory").value});loadProducts();}
+async function createBatch(){await api(`/api/products/${$("pid").value}/batches`,"POST",
+  {batch_no:$("bno").value,design_location:$("f_design").value||null,
+   manufacture_location:$("f_make").value||null,culture_source:$("f_culture").value||null,
+   sale_location:$("f_sale").value||null});loadProducts();}
+async function addChannel(){await api(`/api/batches/${$("cb_batch").value}/channels`,"POST",
+  {channel:$("cb_name").value,url:$("cb_url").value});}
+async function addPrice(){
+  await api(`/api/batches/${$("pr_batch").value}/prices`,"POST",
+  {currency:$("pr_cur").value,
+   amount_min:$("pr_min").value===""?null:Math.round($("pr_min").value*100),
+   amount_max:$("pr_max").value===""?null:Math.round($("pr_max").value*100),
+   effective_from:Number($("pr_from").value)||Math.floor(Date.now()/1000)});
+  loadProducts();}
+async function addEvidence(){await api(`/api/batches/${$("ev_batch").value}/evidence`,"POST",
+  {claim_field:$("ev_field").value,claim_value:$("ev_val").value,
+   evidence_type:$("ev_type").value,ref:$("ev_ref").value,stance:$("ev_stance").value});}
+async function reviewEvidence(){await api(`/api/evidence/${$("rev_ev").value}/review`,"POST",
+  {result:$("rev_result").value,note:$("rev_note").value});loadProducts();}
+async function addMedia(sec){await api(`/api/products/${$("m_pid").value}/media`,"POST",
+  {ref:$("m_ref").value||(`ref-${Date.now()}`),section:sec});}
+async function withdrawMedia(){await api(`/api/media/${$("w_media").value}/withdraw`,"POST",
+  {note:$("w_note").value||"授权撤回"});loadProducts();}
+async function publishProduct(){await api(`/api/products/${$("pub_pid").value}/publish`,"POST",{});loadProducts();}
+async function mergeP(){await api(`/api/products/${$("m_src").value}/merge`,"POST",{into:Number($("m_dst").value)});loadProducts();}
+async function setStatus(s){await api(`/api/products/${$("off_pid").value}/status`,"POST",
+  {status:s,reason:$("off_reason").value});loadProducts();}
+async function reindex(){
+  // 演示“索引晚到”: 每个商品单独入索引, 未入索引的搜不到但详情可见
+  const j=await api("/api/products");
+  for(const it of j.items) await api(`/api/products/${it.product_id}/reindex`,"POST",{});
+}
+async function loadProducts(){const j=await api("/api/products");
+  $("log").textContent=JSON.stringify(j,null,2)+"\n\n"+$("log").textContent;}
+loadProducts();
+</script></body></html>
